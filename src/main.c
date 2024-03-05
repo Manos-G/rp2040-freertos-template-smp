@@ -1,36 +1,31 @@
-#include "FreeRTOS.h"
-#include "task.h"
 #include <stdio.h>
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
 
+const int task_delay = 500;
+const int task_size = 128;
 
-void led_task()
+SemaphoreHandle_t mutex;
+
+void vGuardedPrint(char *out)
 {
-    const uint LED_PIN = PICO_DEFAULT_LED_PIN;
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
-    while (true) {
-        gpio_put(LED_PIN, 1);
-        sleep_us(5);
-        // vTaskDelay(100);
-        gpio_put(LED_PIN, 0);
-        // vTaskDelay(100);
-        sleep_us(5);
-    }
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    puts(out);
+    xSemaphoreGive(mutex);
 }
 
-void led_task2()
+void vTaskSMP_print_core(void *pvParameters)
 {
-    const uint LED_PIN = 24;
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
-    while (true) {
-        gpio_put(LED_PIN, 1);
-        sleep_us(5);
-        // vTaskDelay(100);
-        gpio_put(LED_PIN, 0);
-        // vTaskDelay(100);
-        sleep_us(5);
+    char *task_name = pcTaskGetName(NULL);
+    char out[12];
+
+    for (;;) {
+        sprintf(out, "%s %d", task_name, get_core_num());
+        vGuardedPrint(out);
+        vTaskDelay(task_delay);
     }
 }
 
@@ -38,16 +33,21 @@ int main()
 {
     stdio_init_all();
 
-    TaskHandle_t led_task_handle;
-    TaskHandle_t led_task2_handle;
+    mutex = xSemaphoreCreateMutex();    // Create the mutex
 
-    xTaskCreate(led_task, "LED_Task", configMINIMAL_STACK_SIZE, NULL, 1, &led_task_handle);
-    vTaskCoreAffinitySet(led_task_handle, 1 << 0);
+    TaskHandle_t handleA;
+    TaskHandle_t handleB;
 
-    xTaskCreate(led_task2, "LED_Task2", configMINIMAL_STACK_SIZE, NULL, 1, &led_task2_handle);
-    vTaskCoreAffinitySet(led_task2_handle, 1 << 1);
+    // create 4x tasks with different names & 2 with handles
+    xTaskCreate(vTaskSMP_print_core, "A", task_size, NULL, 1, &handleA);
+    xTaskCreate(vTaskSMP_print_core, "B", task_size, NULL, 1, &handleB);
+    xTaskCreate(vTaskSMP_print_core, "C", task_size, NULL, 1, NULL);
+    xTaskCreate(vTaskSMP_print_core, "D", task_size, NULL, 1, NULL);
+
+    // Pin Tasks
+    vTaskCoreAffinitySet(handleA, (1 << 0));
+    vTaskCoreAffinitySet(handleB, (1 << 1));
 
     vTaskStartScheduler();
-
     while(1){};
 }
