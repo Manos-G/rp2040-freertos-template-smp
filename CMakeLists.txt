@@ -3,10 +3,10 @@ cmake_minimum_required(VERSION 3.12)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Name project
-SET(ProjectName rp2040-freertos-template)
+set(ProjectName rp2040-freertos-template)
 
 # Set any variables required for importing libraries
-SET(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/FreeRTOS-Kernel)
+set(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/FreeRTOS-Kernel)
 
 # Import those libraries
 include(pico_sdk_import.cmake)
@@ -18,9 +18,26 @@ project(${ProjectName})
 # Initialize the Raspberry Pi Pico SDK
 pico_sdk_init()
 
-# Add subdirectories
-add_subdirectory(src)
+# Define the executable target
+add_executable(${ProjectName}
+    src/main.c
+)
 
-# if you have anything in "lib" folder then uncomment below - remember to add a CMakeLists.txt
-# file to the "lib" directory
-#add_subdirectory(lib)
+# Include directories
+target_include_directories(${ProjectName} PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+# Link the necessary libraries
+target_link_libraries(${ProjectName} 
+    pico_stdlib
+    pico_multicore
+    FreeRTOS-Kernel-Heap4
+)
+
+# Enable USB output, disable UART output
+pico_enable_stdio_usb(${ProjectName} 1)
+pico_enable_stdio_uart(${ProjectName} 0)
+
+# Create map/bin/hex/uf2 files
+pico_add_extra_outputs(${ProjectName})
